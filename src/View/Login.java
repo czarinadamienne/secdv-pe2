@@ -90,6 +90,8 @@ public class Login extends javax.swing.JPanel {
 
         if (sqlite.verifyLogin(username, password)) {
             frame.mainNav();
+            usernameFld.setText("");
+            passwordFld.setText("");
         }
         else{
             javax.swing.JOptionPane.showMessageDialog(this, "Invalid username or password!", "Login Failed", javax.swing.JOptionPane.ERROR_MESSAGE);

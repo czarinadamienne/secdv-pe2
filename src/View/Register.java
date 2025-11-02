@@ -105,6 +105,9 @@ public class Register extends javax.swing.JPanel {
 
         if (sqlite.checkUserExists(username) == false && password.equals(confpass) == true && sqlite.checkPasswordStrength(password) == true && username.isEmpty() == false && password.isEmpty() == false && confpass.isEmpty() == false) {
             frame.registerAction(usernameFld.getText(), passwordFld.getText(), confpassFld.getText());
+            usernameFld.setText("");
+            passwordFld.setText("");
+            confpassFld.setText("");
             frame.loginNav();
         }
         else if(sqlite.checkUserExists(username) == true){
