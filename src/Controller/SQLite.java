@@ -360,11 +360,11 @@ public class SQLite {
             if(rs.next()){
                 String storedPassword = rs.getString("password");
                 String[] parts = storedPassword.split(":");
-                if(parts.length != 2){
+                if(parts.length != 3){
                     return false;
                 }
                 String encodedSalt = parts[0];
-                String encodedHash = parts[1];
+                String encodedHash = parts[2];
 
                 byte[] salt = Base64.getDecoder().decode(encodedSalt);
 
@@ -372,7 +372,6 @@ public class SQLite {
                 md.update(salt);
                 byte[] hashedBytes = md.digest(password.getBytes("UTF-8"));
                 String computedHash = Base64.getEncoder().encodeToString(hashedBytes);
-
                 if(computedHash.equals(encodedHash)){
                     return true;
                 }
