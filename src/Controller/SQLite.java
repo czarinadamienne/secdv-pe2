@@ -404,6 +404,24 @@ public class SQLite {
         }
         return false;
     }
+    
+    public int getRoleOfUser(String username) {
+        String sql = "SELECT role FROM users WHERE username='" + username + "';";
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql)){
+
+            if (rs.next()){
+                int role = rs.getInt("role");
+                // if invalid
+                if (role > 5 || role < 1) { return -1; }
+                return role;
+            }
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
+        return -1;
+    }
 
     public boolean checkPasswordStrength(String password){
         // At least 8 characters, at least one uppercase letter, one lowercase letter, one digit, and one special character
