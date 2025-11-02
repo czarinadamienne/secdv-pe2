@@ -352,12 +352,20 @@ public class SQLite {
     }
 
     public boolean verifyLogin(String username, String password){
-        String sql = "SELECT password FROM users WHERE username='" + username + "';";
+        String sql = "SELECT password,role,locked FROM users WHERE username='" + username + "';";
         try (Connection conn = DriverManager.getConnection(driverURL);
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery(sql)){
             
             if(rs.next()){
+                int userRole = rs.getInt("role");
+                int userLocked = rs.getInt("locked");
+                
+                // quickfail
+                if (userLocked != 0 || userRole < 2 || userRole > 5) {
+                    return false;
+                }
+                
                 String storedPassword = rs.getString("password");
                 String[] parts = storedPassword.split(":");
                 if(parts.length != 3){
