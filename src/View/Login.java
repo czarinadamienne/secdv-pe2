@@ -84,26 +84,25 @@ public class Login extends javax.swing.JPanel {
     }// </editor-fold>//GEN-END:initComponents
     private void loginBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_loginBtnActionPerformed
         String username = usernameFld.getText();
-        String password = passwordFld.getText();
+        String password = new String(passwordFld.getPassword());
 
         Controller.SQLite sqlite = new Controller.SQLite();
 
-        int status = sqlite.verifyLogin(username, password);
-
-        if (status == 0) {
-            frame.mainNav();
-            usernameFld.setText("");
-            passwordFld.setText("");
-        } else if (status == 2) {
-            javax.swing.JOptionPane.showMessageDialog(this,
-            "Session timeout, please try again in 15 seconds",
-            "Account Locked", javax.swing.JOptionPane.ERROR_MESSAGE);
-        } else {
-            javax.swing.JOptionPane.showMessageDialog(this,
+        if (sqlite.verifyLogin(username, password)) {
+        String sessionId = sqlite.generateSessionId();
+        int role = sqlite.getRoleOfUser(username);
+        frame.mainNav(role, username, sessionId);
+        
+        // Clear input fields
+        usernameFld.setText("");
+        passwordFld.setText("");
+    }
+    else {
+        javax.swing.JOptionPane.showMessageDialog(this,
             "Invalid username or password!",
             "Login Failed",
             javax.swing.JOptionPane.ERROR_MESSAGE);
-        }
+    }
 
     }//GEN-LAST:event_loginBtnActionPerformed
 

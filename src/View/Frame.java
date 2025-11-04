@@ -123,7 +123,10 @@ public class Frame extends javax.swing.JFrame {
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
-    private void logoutBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_logoutBtnActionPerformed
+    private void logoutBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_logoutBtnActionPerformed\
+        this.currentUsername = null;
+        this.currentSessionId = null;
+
         frameView.show(Container, "loginPnl");
     }//GEN-LAST:event_logoutBtnActionPerformed
 
@@ -138,6 +141,8 @@ public class Frame extends javax.swing.JFrame {
     
     private CardLayout contentView = new CardLayout();
     private CardLayout frameView = new CardLayout();
+    private String currentUsername;
+    private String currentSessionId;
     
     public void init(Main controller){
         this.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -168,7 +173,10 @@ public class Frame extends javax.swing.JFrame {
         this.setVisible(true);
     }
     
-    public void mainNav(int asRole) {
+    public void mainNav(int asRole, String username, String sessionId) {
+        this.currentUsername = username;
+        this.currentSessionId = sessionId;
+
         frameView.show(Container, "homePnl");
         switch(asRole) {
             case 5: contentView.show(Content, "adminHomePnl"); break;

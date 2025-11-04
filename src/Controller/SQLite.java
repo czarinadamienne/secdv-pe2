@@ -15,6 +15,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.UUID; 
 
 public class SQLite {
     
@@ -428,4 +429,8 @@ public class SQLite {
         String pattern = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$";
         return password.matches(pattern);
     }
+    
+    public String generateSessionId() {
+    return UUID.randomUUID().toString();
+}
 }
