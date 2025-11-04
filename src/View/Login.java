@@ -89,7 +89,8 @@ public class Login extends javax.swing.JPanel {
         Controller.SQLite sqlite = new Controller.SQLite();
 
         if (sqlite.verifyLogin(username, password)) {
-            frame.mainNav();
+            int role = sqlite.getRoleOfUser(username);
+            frame.mainNav(role);
             usernameFld.setText("");
             passwordFld.setText("");
         }
