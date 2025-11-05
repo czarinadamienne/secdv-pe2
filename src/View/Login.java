@@ -91,9 +91,9 @@ public class Login extends javax.swing.JPanel {
         int status = sqlite.verifyLogin(username, password);
 
         if (status == 0) {
-            // String sessionId = sqlite.generateSessionId();
-            int role = sqlite.getRoleOfUser(username);
-            frame.mainNav(role, username, "-1");
+            String sessionId = sqlite.generateNewSession(username);
+            // int role = sqlite.getRoleOfUser(username);
+            frame.mainNav(sessionId);
             usernameFld.setText("");
             passwordFld.setText("");
         } else if (status == 2) {

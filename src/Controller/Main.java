@@ -24,7 +24,7 @@ public class Main {
         // Initialize a driver object
         sqlite = new SQLite();
         // sqlite.createSessionsTable();
-        // sqlite.addLoginAttemptColumns(); //can be commented out after first run
+        sqlite.addLoginAttemptColumns(); //can be commented out after first run
 
 //        // Create a database
 //        sqlite.createNewDatabase();
