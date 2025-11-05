@@ -6,6 +6,7 @@ public class User {
     private String password;
     private int role = 2;
     private int locked = 0;
+    private String sessionId;
 
     public User(String username, String password){
         this.username = username;
@@ -58,5 +59,13 @@ public class User {
 
     public void setLocked(int locked) {
         this.locked = locked;
+    }
+
+    public String getSessionId() { 
+        return sessionId; 
+    }
+
+    public void setSessionId(String sessionId) { 
+        this.sessionId = sessionId; 
     }
 }
