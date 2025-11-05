@@ -15,6 +15,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.UUID;
 
 public class SQLite {
     
@@ -102,6 +103,41 @@ public class SQLite {
             Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
             System.out.println("Table users in database.db created.");
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
+    }
+    
+    /*
+    public void addLoginAttemptColumns() {
+        String sql1 = "ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0;";
+        String sql2 = "ALTER TABLE users ADD COLUMN locked_until INTEGER DEFAULT 0;";
+
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement()) {
+
+            stmt.execute(sql1);
+            stmt.execute(sql2);
+            System.out.println("Columns failed_attempts and locked_until added successfully!");
+
+        } catch (Exception ex) {
+            System.out.println("Error or columns may already exist: " + ex.getMessage());
+        }
+    }
+    */
+    
+    public void createSessionsTable() {
+        String sql = "CREATE TABLE IF NOT EXISTS sessions (\n"
+            + " id TEXT NOT NULL,\n"
+            + " username INTEGER NOT NULL,\n"
+            + " role INTEGER NOT NULL,\n"
+            + " active INTEGER DEFAULT 0\n"
+            + ");";
+
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+            System.out.println("Table sessions in database.db created.");
         } catch (Exception ex) {
             System.out.print(ex);
         }
@@ -354,7 +390,6 @@ public class SQLite {
         }
         return product;
     }
-
     
     public int verifyLogin(String username, String password) {
         long now = System.currentTimeMillis();
@@ -379,7 +414,7 @@ public class SQLite {
                     }
                     return 1; // invalid login
                 }
-
+                
                 int userRole = rs.getInt("role");
                 int userLocked = rs.getInt("locked");
                 if (userLocked != 0 || userRole < 2 || userRole > 5) {
@@ -437,7 +472,7 @@ public class SQLite {
         return false;
     }
     
-    public int getRoleOfUser(String username) {
+    private int getRoleOfUser(String username) {
         String sql = "SELECT role FROM users WHERE username='" + username + "';";
         try (Connection conn = DriverManager.getConnection(driverURL);
             Statement stmt = conn.createStatement();
@@ -459,5 +494,88 @@ public class SQLite {
         // At least 8 characters, at least one uppercase letter, one lowercase letter, one digit, and one special character
         String pattern = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$";
         return password.matches(pattern);
+    }
+    
+    // Private: simply generates a session ID for a new session
+    private String generateSessionId() {
+        return UUID.randomUUID().toString();
+    }
+    
+    // Generates a new session ID as a given user and logs it in the database
+    // Returns the new generated session ID
+    public String generateNewSession(String username) {
+        // get data to be pushed to the db
+        String id = generateSessionId();
+        int role = getRoleOfUser(username);
+        // quickfail - return empty string as invalid session
+        if (role == -1) { return ""; }
+        
+        // build command
+        String sql = "INSERT INTO sessions(id,username,role,active) VALUES(?, ?, ?, 1)";
+        
+        // connect to mysqlite
+        try {
+            Connection conn = DriverManager.getConnection(driverURL);
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, id);
+            ps.setString(2, username);
+            ps.setInt(3, role);
+            ps.executeUpdate();
+            return id;
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
+        
+        return "";
+    }
+    
+    // Gets the assigned role from a session ID
+    // Returns -1 if invalid
+    public int getSessionRole(String session) {
+        String sql = "SELECT role FROM sessions WHERE id='" + session + "';";
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql)){
+
+            if (rs.next()){
+                int role = rs.getInt("role");
+                // if invalid
+                if (role > 5 || role < 1) { return -1; }
+                return role;
+            }
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
+        return -1;
+    }
+    
+    // Gets the assigned username from a session ID
+    // Returns -1 if invalid
+    public String getSessionUsername(String session) {
+        String sql = "SELECT username FROM sessions WHERE id='" + session + "';";
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql)){
+
+            if (rs.next()){
+                String username = rs.getString("username");
+                return username;
+            }
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
+        return "";
+    }
+    
+    public void endSession(String session) {
+        String sql = "DELETE FROM sessions WHERE id='" + session + "';";
+
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+            // System.out.println("Session " + session + " has been closed.");
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
     }
 }
