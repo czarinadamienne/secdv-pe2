@@ -122,6 +122,22 @@ public class SQLite {
         }
     }
     
+    public void createSessionsTable() {
+        String sql = "CREATE TABLE IF NOT EXISTS sessions (\n"
+            + " id TEXT NOT NULL,\n"
+            + " role INTEGER NOT NULL,\n"
+            + " active INTEGER DEFAULT 0\n"
+            + ");";
+
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+            System.out.println("Table sessions in database.db created.");
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
+    }
+    
     public void dropHistoryTable() {
         String sql = "DROP TABLE IF EXISTS history;";
 
