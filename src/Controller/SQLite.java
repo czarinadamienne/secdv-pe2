@@ -418,7 +418,7 @@ public class SQLite {
                 int userRole = rs.getInt("role");
                 int userLocked = rs.getInt("locked");
                 if (userLocked != 0 || userRole < 2 || userRole > 5) {
-                    return 2; // account locked or invalid
+                    return 1; // account locked or invalid
                 }
 
                 String storedPassword = rs.getString("password");
