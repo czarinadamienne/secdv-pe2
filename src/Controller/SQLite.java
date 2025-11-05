@@ -21,6 +21,8 @@ public class SQLite {
     
     public int DEBUG_MODE = 0;
     String driverURL = "jdbc:sqlite:" + "database.db";
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final long LOCK_DURATION_MS = 15 * 1000L; //15 second timeout, can be longer but shorter time used for testing lockout
     
     public void createNewDatabase() {
         try (Connection conn = DriverManager.getConnection(driverURL)) {
@@ -101,6 +103,22 @@ public class SQLite {
             System.out.println("Table users in database.db created.");
         } catch (Exception ex) {
             System.out.print(ex);
+        }
+    }
+    
+    public void addLoginAttemptColumns() {
+        String sql1 = "ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0;";
+        String sql2 = "ALTER TABLE users ADD COLUMN locked_until INTEGER DEFAULT 0;";
+
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement()) {
+
+            stmt.execute(sql1);
+            stmt.execute(sql2);
+            System.out.println("Columns failed_attempts and locked_until added successfully!");
+
+        } catch (Exception ex) {
+            System.out.println("Error or columns may already exist: " + ex.getMessage());
         }
     }
     
@@ -351,7 +369,35 @@ public class SQLite {
         }
         return product;
     }
+    
+    private void incrementFailedAttempts(Connection conn, String username, int newCount, long now) throws Exception {
+        if (newCount >= MAX_FAILED_ATTEMPTS) {
+            long lockUntil = now + LOCK_DURATION_MS;
+            String sql = "UPDATE users SET failed_attempts = 0, locked_until = ? WHERE username = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setLong(1, lockUntil);
+                ps.setString(2, username);
+                ps.executeUpdate();
+            }
+            System.out.println("User " + username + " temporarily locked until " + lockUntil);
+        } else {
+            String sql = "UPDATE users SET failed_attempts = ? WHERE username = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, newCount);
+                ps.setString(2, username);
+                ps.executeUpdate();
+            }
+        }
+    }
 
+    private void resetFailedAttempts(Connection conn, String username) throws Exception {
+        String sql = "UPDATE users SET failed_attempts = 0, locked_until = 0 WHERE username = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username);
+            ps.executeUpdate();
+        }
+    }
+    
     public boolean verifyLogin(String username, String password){
         String sql = "SELECT password,role,locked FROM users WHERE username='" + username + "';";
         try (Connection conn = DriverManager.getConnection(driverURL);
