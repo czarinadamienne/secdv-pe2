@@ -23,7 +23,6 @@ public class Main {
     public void init(){
         // Initialize a driver object
         sqlite = new SQLite();
-        // sqlite.createSessionsTable();
         sqlite.addLoginAttemptColumns(); //can be commented out after first run
 
 //        // Create a database
