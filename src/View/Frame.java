@@ -123,12 +123,12 @@ public class Frame extends javax.swing.JFrame {
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
-    private void logoutBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_logoutBtnActionPerformed\
+    private void logoutBtnActionPerformed(java.awt.event.ActionEvent evt) {                                           
         this.currentUsername = null;
         this.currentSessionId = null;
 
         frameView.show(Container, "loginPnl");
-    }//GEN-LAST:event_logoutBtnActionPerformed
+    }                                         
 
     public Main main;
     public Login loginPnl = new Login();

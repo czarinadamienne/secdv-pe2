@@ -398,43 +398,62 @@ public class SQLite {
         }
     }
     
-    public boolean verifyLogin(String username, String password){
-        String sql = "SELECT password,role,locked FROM users WHERE username='" + username + "';";
+    public int verifyLogin(String username, String password) {
+        String sql = "SELECT password, role, locked, failed_attempts, locked_until FROM users WHERE username = ?";
+        long now = System.currentTimeMillis();
+
         try (Connection conn = DriverManager.getConnection(driverURL);
-            Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery(sql)){
-            
-            if(rs.next()){
+            PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, username);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    return 1; // invalid credentials
+                }
+
                 int userRole = rs.getInt("role");
                 int userLocked = rs.getInt("locked");
-                
-                // quickfail
+                int failedAttempts = rs.getInt("failed_attempts");
+                long lockedUntil = rs.getLong("locked_until");
+
+                // Permanently locked or invalid role
                 if (userLocked != 0 || userRole < 2 || userRole > 5) {
-                    return false;
+                    return 2; // locked
                 }
-                
+
+                // Temporarily locked
+                if (lockedUntil > now) {
+                    return 2;
+                }
+
+                // Password verification
                 String storedPassword = rs.getString("password");
                 String[] parts = storedPassword.split(":");
-                if(parts.length != 3){
-                    return false;
+                if (parts.length != 3) {
+                    return 1;
                 }
+
                 String encodedSalt = parts[0];
                 String encodedHash = parts[2];
-
                 byte[] salt = Base64.getDecoder().decode(encodedSalt);
 
                 MessageDigest md = MessageDigest.getInstance("SHA-256");
                 md.update(salt);
                 byte[] hashedBytes = md.digest(password.getBytes("UTF-8"));
                 String computedHash = Base64.getEncoder().encodeToString(hashedBytes);
-                if(computedHash.equals(encodedHash)){
-                    return true;
+
+                if (computedHash.equals(encodedHash)) {
+                    resetFailedAttempts(conn, username);
+                    return 0; // success
+                } else {
+                    incrementFailedAttempts(conn, username, failedAttempts + 1, now);
+                    return 1; // wrong password
                 }
             }
         } catch (Exception ex) {
             System.out.print(ex);
+            return 1;
         }
-        return false;
     }
 
     public boolean checkUserExists(String username){
@@ -477,6 +496,6 @@ public class SQLite {
     }
     
     public String generateSessionId() {
-    return UUID.randomUUID().toString();
-}
+        return UUID.randomUUID().toString();
+    }
 }
