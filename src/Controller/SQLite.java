@@ -15,7 +15,6 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.UUID; 
 
 public class SQLite {
     
@@ -369,7 +368,9 @@ public class SQLite {
         }
         return product;
     }
-    
+
+    // Increment function for logging failed login attempts
+
     private void incrementFailedAttempts(Connection conn, String username, int newCount, long now) throws Exception {
         if (newCount >= MAX_FAILED_ATTEMPTS) {
             long lockUntil = now + LOCK_DURATION_MS;
@@ -397,6 +398,7 @@ public class SQLite {
             ps.executeUpdate();
         }
     }
+
     
     public int verifyLogin(String username, String password) {
         String sql = "SELECT password, role, locked, failed_attempts, locked_until FROM users WHERE username = ?";
@@ -493,9 +495,5 @@ public class SQLite {
         // At least 8 characters, at least one uppercase letter, one lowercase letter, one digit, and one special character
         String pattern = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$";
         return password.matches(pattern);
-    }
-    
-    public String generateSessionId() {
-        return UUID.randomUUID().toString();
     }
 }
