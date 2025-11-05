@@ -15,14 +15,16 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.UUID; 
+import java.util.UUID;
 
 public class SQLite {
     
     public int DEBUG_MODE = 0;
     String driverURL = "jdbc:sqlite:" + "database.db";
-    private static final int MAX_FAILED_ATTEMPTS = 5;
-    private static final long LOCK_DURATION_MS = 15 * 1000L; //15 second timeout, can be longer but shorter time used for testing lockout
+    private static int globalFailedAttempts = 0;
+    private static long globalLockUntil = 0;
+    private static final int MAX_GLOBAL_ATTEMPTS = 5;
+    private static final long GLOBAL_LOCK_DURATION_MS = 15 * 1000L; // 15 seconds, can be changed
     
     public void createNewDatabase() {
         try (Connection conn = DriverManager.getConnection(driverURL)) {
@@ -106,6 +108,7 @@ public class SQLite {
         }
     }
     
+    /*
     public void addLoginAttemptColumns() {
         String sql1 = "ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0;";
         String sql2 = "ALTER TABLE users ADD COLUMN locked_until INTEGER DEFAULT 0;";
@@ -119,6 +122,24 @@ public class SQLite {
 
         } catch (Exception ex) {
             System.out.println("Error or columns may already exist: " + ex.getMessage());
+        }
+    }
+    */
+    
+    public void createSessionsTable() {
+        String sql = "CREATE TABLE IF NOT EXISTS sessions (\n"
+            + " id TEXT NOT NULL,\n"
+            + " username INTEGER NOT NULL,\n"
+            + " role INTEGER NOT NULL,\n"
+            + " active INTEGER DEFAULT 0\n"
+            + ");";
+
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+            System.out.println("Table sessions in database.db created.");
+        } catch (Exception ex) {
+            System.out.print(ex);
         }
     }
     
@@ -370,67 +391,43 @@ public class SQLite {
         return product;
     }
     
-    private void incrementFailedAttempts(Connection conn, String username, int newCount, long now) throws Exception {
-        if (newCount >= MAX_FAILED_ATTEMPTS) {
-            long lockUntil = now + LOCK_DURATION_MS;
-            String sql = "UPDATE users SET failed_attempts = 0, locked_until = ? WHERE username = ?";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setLong(1, lockUntil);
-                ps.setString(2, username);
-                ps.executeUpdate();
-            }
-            System.out.println("User " + username + " temporarily locked until " + lockUntil);
-        } else {
-            String sql = "UPDATE users SET failed_attempts = ? WHERE username = ?";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, newCount);
-                ps.setString(2, username);
-                ps.executeUpdate();
-            }
-        }
-    }
-
-    private void resetFailedAttempts(Connection conn, String username) throws Exception {
-        String sql = "UPDATE users SET failed_attempts = 0, locked_until = 0 WHERE username = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, username);
-            ps.executeUpdate();
-        }
-    }
-    
-    public int verifyLogin(String username, String password) {
-        String sql = "SELECT password, role, locked, failed_attempts, locked_until FROM users WHERE username = ?";
+    // Verifies a login and returns a session UUID if successful.
+    // Returns an empty string "" if not successful
+    // Returns value "<locked>" if this client is locked
+    public String verifyLogin(String username, String password) {
         long now = System.currentTimeMillis();
 
+        // Global lockout check
+        if (globalLockUntil > now) {
+            return "<locked>"; // globally locked
+        }
+
+        String sql = "SELECT password, role, locked FROM users WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(driverURL);
             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
             stmt.setString(1, username);
             try (ResultSet rs = stmt.executeQuery()) {
-                if (!rs.next()) {
-                    return 1; // invalid credentials
-                }
 
+                if (!rs.next()) {
+                    globalFailedAttempts++;
+                    if (globalFailedAttempts >= MAX_GLOBAL_ATTEMPTS) {
+                        globalLockUntil = now + GLOBAL_LOCK_DURATION_MS;
+                        globalFailedAttempts = 0;
+                    }
+                    return ""; // invalid login
+                }
+                
                 int userRole = rs.getInt("role");
                 int userLocked = rs.getInt("locked");
-                int failedAttempts = rs.getInt("failed_attempts");
-                long lockedUntil = rs.getLong("locked_until");
-
-                // Permanently locked or invalid role
                 if (userLocked != 0 || userRole < 2 || userRole > 5) {
-                    return 2; // locked
+                    return ""; // account locked or invalid
                 }
 
-                // Temporarily locked
-                if (lockedUntil > now) {
-                    return 2;
-                }
-
-                // Password verification
                 String storedPassword = rs.getString("password");
                 String[] parts = storedPassword.split(":");
                 if (parts.length != 3) {
-                    return 1;
+                    return "";
                 }
 
                 String encodedSalt = parts[0];
@@ -443,18 +440,25 @@ public class SQLite {
                 String computedHash = Base64.getEncoder().encodeToString(hashedBytes);
 
                 if (computedHash.equals(encodedHash)) {
-                    resetFailedAttempts(conn, username);
-                    return 0; // success
+                    // Success — reset global attempts
+                    globalFailedAttempts = 0;
+                    return generateNewSession(conn, username);
                 } else {
-                    incrementFailedAttempts(conn, username, failedAttempts + 1, now);
-                    return 1; // wrong password
+                    // Wrong password — count attempt
+                    globalFailedAttempts++;
+                    if (globalFailedAttempts >= MAX_GLOBAL_ATTEMPTS) {
+                        globalLockUntil = now + GLOBAL_LOCK_DURATION_MS;
+                        globalFailedAttempts = 0;
+                    }
+                    return "";
                 }
             }
         } catch (Exception ex) {
             System.out.print(ex);
-            return 1;
+            return "";
         }
     }
+
 
     public boolean checkUserExists(String username){
         String sql = "SELECT id FROM users WHERE username='" + username + "';";
@@ -471,7 +475,7 @@ public class SQLite {
         return false;
     }
     
-    public int getRoleOfUser(String username) {
+    private int getRoleOfUser(String username) {
         String sql = "SELECT role FROM users WHERE username='" + username + "';";
         try (Connection conn = DriverManager.getConnection(driverURL);
             Statement stmt = conn.createStatement();
@@ -495,7 +499,85 @@ public class SQLite {
         return password.matches(pattern);
     }
     
-    public String generateSessionId() {
+    // Private: simply generates a session ID for a new session
+    private String generateSessionId() {
         return UUID.randomUUID().toString();
+    }
+    
+    // Generates a new session ID as a given user and logs it in the database
+    // Returns the new generated session ID
+    private String generateNewSession(Connection conn, String username) {
+        // get data to be pushed to the db
+        String id = generateSessionId();
+        int role = getRoleOfUser(username);
+        // quickfail - return empty string as invalid session
+        if (role == -1) { return ""; }
+        
+        // build command
+        String sql = "INSERT INTO sessions(id,username,role,active) VALUES(?, ?, ?, 1)";
+        
+        // connect to mysqlite
+        try {
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, id);
+            ps.setString(2, username);
+            ps.setInt(3, role);
+            ps.executeUpdate();
+            return id;
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
+        
+        return "";
+    }
+    
+    // Gets the assigned role from a session ID
+    // Returns -1 if invalid
+    public int getSessionRole(String session) {
+        String sql = "SELECT role FROM sessions WHERE id='" + session + "';";
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql)){
+
+            if (rs.next()){
+                int role = rs.getInt("role");
+                // if invalid
+                if (role > 5 || role < 1) { return -1; }
+                return role;
+            }
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
+        return -1;
+    }
+    
+    // Gets the assigned username from a session ID
+    // Returns -1 if invalid
+    public String getSessionUsername(String session) {
+        String sql = "SELECT username FROM sessions WHERE id='" + session + "';";
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql)){
+
+            if (rs.next()){
+                String username = rs.getString("username");
+                return username;
+            }
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
+        return "";
+    }
+    
+    public void endSession(String session) {
+        String sql = "DELETE FROM sessions WHERE id='" + session + "';";
+
+        try (Connection conn = DriverManager.getConnection(driverURL);
+            Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+            // System.out.println("Session " + session + " has been closed.");
+        } catch (Exception ex) {
+            System.out.print(ex);
+        }
     }
 }

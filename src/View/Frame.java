@@ -1,6 +1,7 @@
 package View;
 
 import Controller.Main;
+import Controller.SQLite;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
@@ -26,6 +27,11 @@ public class Frame extends javax.swing.JFrame {
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setBackground(new java.awt.Color(153, 153, 153));
         setMinimumSize(new java.awt.Dimension(800, 450));
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            public void windowClosing(java.awt.event.WindowEvent evt) {
+                formWindowClosing(evt);
+            }
+        });
 
         HomePnl.setBackground(new java.awt.Color(102, 102, 102));
         HomePnl.setPreferredSize(new java.awt.Dimension(801, 500));
@@ -123,9 +129,21 @@ public class Frame extends javax.swing.JFrame {
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
-    private void logoutBtnActionPerformed(java.awt.event.ActionEvent evt) {                                           
+    private void formWindowClosing(java.awt.event.WindowEvent evt) {//GEN-FIRST:event_formWindowClosing
+        // TODO add your handling code here:
+        Controller.SQLite sqlite = new Controller.SQLite();  
+        sqlite.endSession(this.currentSessionId);
         this.currentUsername = null;
         this.currentSessionId = null;
+        this.currentRole = -1;
+    }//GEN-LAST:event_formWindowClosing
+
+    private void logoutBtnActionPerformed(java.awt.event.ActionEvent evt) {   
+        Controller.SQLite sqlite = new Controller.SQLite();  
+        sqlite.endSession(this.currentSessionId);
+        this.currentUsername = null;
+        this.currentSessionId = null;
+        this.currentRole = -1;
 
         frameView.show(Container, "loginPnl");
     }                                         
@@ -143,6 +161,7 @@ public class Frame extends javax.swing.JFrame {
     private CardLayout frameView = new CardLayout();
     private String currentUsername;
     private String currentSessionId;
+    private int currentRole;
     
     public void init(Main controller){
         this.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -173,12 +192,14 @@ public class Frame extends javax.swing.JFrame {
         this.setVisible(true);
     }
     
-    public void mainNav(int asRole, String username, String sessionId) {
-        this.currentUsername = username;
+    public void mainNav(String sessionId) {
+        Controller.SQLite sqlite = new Controller.SQLite();
         this.currentSessionId = sessionId;
+        this.currentUsername = sqlite.getSessionUsername(sessionId);
+        this.currentRole = sqlite.getSessionRole(sessionId);
 
         frameView.show(Container, "homePnl");
-        switch(asRole) {
+        switch(this.currentRole) {
             case 5: contentView.show(Content, "adminHomePnl"); break;
             case 4: contentView.show(Content, "managerHomePnl"); break;
             case 3: contentView.show(Content, "staffHomePnl"); break;
@@ -198,7 +219,7 @@ public class Frame extends javax.swing.JFrame {
     public void registerAction(String username, String password, String confpass){
         main.sqlite.addUser(username, password);
     }
-
+    
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JPanel Container;
     private javax.swing.JPanel Content;
