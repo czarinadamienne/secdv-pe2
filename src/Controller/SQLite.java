@@ -15,14 +15,15 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.UUID; 
 
 public class SQLite {
     
     public int DEBUG_MODE = 0;
     String driverURL = "jdbc:sqlite:" + "database.db";
-    private static final int MAX_FAILED_ATTEMPTS = 5;
-    private static final long LOCK_DURATION_MS = 15 * 1000L; //15 second timeout, can be longer but shorter time used for testing lockout
+    private static int globalFailedAttempts = 0;
+    private static long globalLockUntil = 0;
+    private static final int MAX_GLOBAL_ATTEMPTS = 5;
+    private static final long GLOBAL_LOCK_DURATION_MS = 15 * 1000L; // 15 seconds, can be changed
     
     public void createNewDatabase() {
         try (Connection conn = DriverManager.getConnection(driverURL)) {
@@ -103,22 +104,6 @@ public class SQLite {
             System.out.println("Table users in database.db created.");
         } catch (Exception ex) {
             System.out.print(ex);
-        }
-    }
-    
-    public void addLoginAttemptColumns() {
-        String sql1 = "ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0;";
-        String sql2 = "ALTER TABLE users ADD COLUMN locked_until INTEGER DEFAULT 0;";
-
-        try (Connection conn = DriverManager.getConnection(driverURL);
-            Statement stmt = conn.createStatement()) {
-
-            stmt.execute(sql1);
-            stmt.execute(sql2);
-            System.out.println("Columns failed_attempts and locked_until added successfully!");
-
-        } catch (Exception ex) {
-            System.out.println("Error or columns may already exist: " + ex.getMessage());
         }
     }
     
@@ -369,64 +354,38 @@ public class SQLite {
         }
         return product;
     }
-    
-    private void incrementFailedAttempts(Connection conn, String username, int newCount, long now) throws Exception {
-        if (newCount >= MAX_FAILED_ATTEMPTS) {
-            long lockUntil = now + LOCK_DURATION_MS;
-            String sql = "UPDATE users SET failed_attempts = 0, locked_until = ? WHERE username = ?";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setLong(1, lockUntil);
-                ps.setString(2, username);
-                ps.executeUpdate();
-            }
-            System.out.println("User " + username + " temporarily locked until " + lockUntil);
-        } else {
-            String sql = "UPDATE users SET failed_attempts = ? WHERE username = ?";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, newCount);
-                ps.setString(2, username);
-                ps.executeUpdate();
-            }
-        }
-    }
 
-    private void resetFailedAttempts(Connection conn, String username) throws Exception {
-        String sql = "UPDATE users SET failed_attempts = 0, locked_until = 0 WHERE username = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, username);
-            ps.executeUpdate();
-        }
-    }
     
     public int verifyLogin(String username, String password) {
-        String sql = "SELECT password, role, locked, failed_attempts, locked_until FROM users WHERE username = ?";
         long now = System.currentTimeMillis();
 
+        // Global lockout check
+        if (globalLockUntil > now) {
+            return 2; // globally locked
+        }
+
+        String sql = "SELECT password, role, locked FROM users WHERE username = ?";
         try (Connection conn = DriverManager.getConnection(driverURL);
             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
             stmt.setString(1, username);
             try (ResultSet rs = stmt.executeQuery()) {
+
                 if (!rs.next()) {
-                    return 1; // invalid credentials
+                    globalFailedAttempts++;
+                    if (globalFailedAttempts >= MAX_GLOBAL_ATTEMPTS) {
+                        globalLockUntil = now + GLOBAL_LOCK_DURATION_MS;
+                        globalFailedAttempts = 0;
+                    }
+                    return 1; // invalid login
                 }
 
                 int userRole = rs.getInt("role");
                 int userLocked = rs.getInt("locked");
-                int failedAttempts = rs.getInt("failed_attempts");
-                long lockedUntil = rs.getLong("locked_until");
-
-                // Permanently locked or invalid role
                 if (userLocked != 0 || userRole < 2 || userRole > 5) {
-                    return 2; // locked
+                    return 2; // account locked or invalid
                 }
 
-                // Temporarily locked
-                if (lockedUntil > now) {
-                    return 2;
-                }
-
-                // Password verification
                 String storedPassword = rs.getString("password");
                 String[] parts = storedPassword.split(":");
                 if (parts.length != 3) {
@@ -443,11 +402,17 @@ public class SQLite {
                 String computedHash = Base64.getEncoder().encodeToString(hashedBytes);
 
                 if (computedHash.equals(encodedHash)) {
-                    resetFailedAttempts(conn, username);
-                    return 0; // success
+                    // Success — reset global attempts
+                    globalFailedAttempts = 0;
+                    return 0;
                 } else {
-                    incrementFailedAttempts(conn, username, failedAttempts + 1, now);
-                    return 1; // wrong password
+                    // Wrong password — count attempt
+                    globalFailedAttempts++;
+                    if (globalFailedAttempts >= MAX_GLOBAL_ATTEMPTS) {
+                        globalLockUntil = now + GLOBAL_LOCK_DURATION_MS;
+                        globalFailedAttempts = 0;
+                    }
+                    return 1;
                 }
             }
         } catch (Exception ex) {
@@ -455,6 +420,7 @@ public class SQLite {
             return 1;
         }
     }
+
 
     public boolean checkUserExists(String username){
         String sql = "SELECT id FROM users WHERE username='" + username + "';";
@@ -493,9 +459,5 @@ public class SQLite {
         // At least 8 characters, at least one uppercase letter, one lowercase letter, one digit, and one special character
         String pattern = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$";
         return password.matches(pattern);
-    }
-    
-    public String generateSessionId() {
-        return UUID.randomUUID().toString();
     }
 }
