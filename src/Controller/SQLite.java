@@ -391,12 +391,15 @@ public class SQLite {
         return product;
     }
     
-    public int verifyLogin(String username, String password) {
+    // Verifies a login and returns a session UUID if successful.
+    // Returns an empty string "" if not successful
+    // Returns value "<locked>" if this client is locked
+    public String verifyLogin(String username, String password) {
         long now = System.currentTimeMillis();
 
         // Global lockout check
         if (globalLockUntil > now) {
-            return 2; // globally locked
+            return "<locked>"; // globally locked
         }
 
         String sql = "SELECT password, role, locked FROM users WHERE username = ?";
@@ -412,19 +415,19 @@ public class SQLite {
                         globalLockUntil = now + GLOBAL_LOCK_DURATION_MS;
                         globalFailedAttempts = 0;
                     }
-                    return 1; // invalid login
+                    return ""; // invalid login
                 }
                 
                 int userRole = rs.getInt("role");
                 int userLocked = rs.getInt("locked");
                 if (userLocked != 0 || userRole < 2 || userRole > 5) {
-                    return 1; // account locked or invalid
+                    return ""; // account locked or invalid
                 }
 
                 String storedPassword = rs.getString("password");
                 String[] parts = storedPassword.split(":");
                 if (parts.length != 3) {
-                    return 1;
+                    return "";
                 }
 
                 String encodedSalt = parts[0];
@@ -439,7 +442,7 @@ public class SQLite {
                 if (computedHash.equals(encodedHash)) {
                     // Success — reset global attempts
                     globalFailedAttempts = 0;
-                    return 0;
+                    return generateNewSession(conn, username);
                 } else {
                     // Wrong password — count attempt
                     globalFailedAttempts++;
@@ -447,12 +450,12 @@ public class SQLite {
                         globalLockUntil = now + GLOBAL_LOCK_DURATION_MS;
                         globalFailedAttempts = 0;
                     }
-                    return 1;
+                    return "";
                 }
             }
         } catch (Exception ex) {
             System.out.print(ex);
-            return 1;
+            return "";
         }
     }
 
@@ -503,7 +506,7 @@ public class SQLite {
     
     // Generates a new session ID as a given user and logs it in the database
     // Returns the new generated session ID
-    public String generateNewSession(String username) {
+    private String generateNewSession(Connection conn, String username) {
         // get data to be pushed to the db
         String id = generateSessionId();
         int role = getRoleOfUser(username);
@@ -515,7 +518,6 @@ public class SQLite {
         
         // connect to mysqlite
         try {
-            Connection conn = DriverManager.getConnection(driverURL);
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, id);
             ps.setString(2, username);
