@@ -84,16 +84,16 @@ public class Login extends javax.swing.JPanel {
     }// </editor-fold>//GEN-END:initComponents
     private void loginBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_loginBtnActionPerformed
         String username = usernameFld.getText();
-        String password = new String(passwordFld.getText());
+        String password = passwordFld.getText();
 
         Controller.SQLite sqlite = new Controller.SQLite();
-
+        
         int status = sqlite.verifyLogin(username, password);
 
         if (status == 0) {
-            String sessionId = sqlite.generateSessionId();
+            // String sessionId = sqlite.generateSessionId();
             int role = sqlite.getRoleOfUser(username);
-            frame.mainNav(role, username, sessionId);
+            frame.mainNav(role, username, "-1");
             usernameFld.setText("");
             passwordFld.setText("");
         } else if (status == 2) {
@@ -105,8 +105,7 @@ public class Login extends javax.swing.JPanel {
             "Invalid username or password!",
             "Login Failed",
             javax.swing.JOptionPane.ERROR_MESSAGE);
-    }
-
+        }
     }//GEN-LAST:event_loginBtnActionPerformed
 
     private void registerBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_registerBtnActionPerformed
